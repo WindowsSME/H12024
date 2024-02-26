@@ -7,14 +7,14 @@
 # 20 February 2024
 
 # DESCRIPTION:
-# The script gathers information from different registry paths related to logon UI, OMADM, Rnrollments, and Profilelist keys.
+# The script gathers information from different registry paths related to logon UI, OMADM, Enrollments, and Profilelist keys.
 # It also collects system details such as hostname and serial number.
-# Furthermore, it compresses specific Airwatch folders into zip files for easier management.
+# Likewise, it compresses specific Airwatch folders into zip files for easier management.
+# Furthermore, it extracts Windows Logs and zips the .evtx files
 
 # NOTES:
 # - Ensure to run this script with appropriate permissions to access registry and file system.
-# - The script generates a log file at C:\Temp\Zip-AirwatchFolders.txt for tracking operations.
-# - Output files are stored in the C:\Temp directory with a timestamped filename.
+# - There will be a single zip file to submit for investigation saved at C:\Temp
 
 
 function Get-LogonUIRegistryProperties {
@@ -53,7 +53,6 @@ function Get-OMADMSubkeyNames {
         }
     }
 
-    # Output the names of the subkeys
     Write-Output "---------------- OMADM Keys ----------------"
     Write-Output ""
     foreach ($index in 0..($subkeys.Count - 1)) {
@@ -80,7 +79,7 @@ function Get-EnrollmentsWithUPN {
             $value = Get-ItemProperty -Path $subkey.PSPath | Where-Object { $_.UPN -ne $null }
             if ($value) {
                 $found = $true
-                # Output all the values for the key
+
                 $keyValues = Get-ItemProperty -Path $subkey.PSPath | Select-Object @{Name="Source";Expression={$RegistryPath}}, *
                 $subkeyName = Split-Path $subkey -Leaf
                 $subkeyValue = (Get-ItemProperty -Path $subkey.PSPath).PSChildName
@@ -121,6 +120,7 @@ function Get-ProfileListKeysInfo {
         $profile
     }
 }
+
 
 function Zip-AirwatchFolders {
     param (
@@ -195,15 +195,51 @@ function Zip-AirwatchFolders {
         Write-Output "------------------------------------" | Tee-Object -FilePath $LogFile -Append
         Write-Output "" | Tee-Object -FilePath $LogFile -Append
         Write-Host "Registry information extraction completed." -ForegroundColor Yellow | Tee-Object -FilePath $LogFile -Append
-        Write-Host "Please see C:\Temp\$Filename" -ForegroundColor Cyan | Tee-Object -FilePath $LogFile -Append
         Write-Output "" | Tee-Object -FilePath $LogFile -Append
-        Write-Host "Completed compressing folder/s." -ForegroundColor Yellow | Tee-Object -FilePath $LogFile -Append
-        Write-Host "Please see ($DataZipFile, $FilesZipFile)" -ForegroundColor Cyan | Tee-Object -FilePath $LogFile -Append
+        Write-Host "Completed compressing Airwatch folder/s." -ForegroundColor Yellow | Tee-Object -FilePath $LogFile -Append
+
     }
     catch {
         Write-Error "An error occurred: $_"
         Write-Host "Error occurred. Please check the log file: $LogFile"
     }
+}
+
+
+function Export-WindowsLogs {
+    $logArray = @("Application", "Security", "System")
+    $DestinationPath = "C:\Temp\"
+
+    $PCName = $env:COMPUTERNAME
+    $LogDate = Get-Date -Format yyyyMMddHHmm
+    $StopWatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+    if ($DestinationPath -notmatch '.+?\\$') {
+        $DestinationPath += '\'
+    }
+
+    if (-not (Test-Path -Path $DestinationPath)) {
+        New-Item -ItemType Directory -Path $DestinationPath
+    }
+
+    foreach ($Log in $LogArray) {
+        $Destination = Join-Path -Path $DestinationPath -ChildPath "Windows-Logs-$Log-$LogDate.evtx"
+        wevtutil epl $Log $Destination
+    }
+
+    $StopWatch.Stop()
+    $TotalTime = $StopWatch.Elapsed.TotalSeconds
+    $TotalTime = [math]::Round($TotalTime, 2)
+
+    $NewEvtxFiles = Get-ChildItem -Path $DestinationPath -Filter "*.evtx" | Where-Object { $_.LastWriteTime -ge (Get-Date).AddSeconds(-$TotalTime) }
+
+    $ZipFileName = Join-Path -Path $DestinationPath -ChildPath "Windows-Logs-$LogDate.zip"
+    Compress-Archive -Path $NewEvtxFiles.FullName -DestinationPath $ZipFileName
+
+    $NewEvtxFiles | ForEach-Object { Remove-Item $_.FullName -Force }
+
+    Write-Host ""
+    Write-Host "Completed extracting Windows Logs." -ForegroundColor Yellow
 }
 
 
@@ -229,3 +265,23 @@ Get-OMADMSubkeyNames | Tee-Object -FilePath "C:\Temp\$Filename" -Append
 Get-EnrollmentsWithUPN | Tee-Object -FilePath "C:\Temp\$Filename" -Append
 Get-ProfileListKeysInfo | Tee-Object -FilePath "C:\Temp\$Filename" -Append
 Zip-AirwatchFolders
+Export-WindowsLogs
+
+$GeneratedFiles = Get-ChildItem -Path "C:\Temp" -File | Where-Object { $_.Name -like "RegInfo_*.txt" -or $_.Name -like "Airwatch*.zip" -or $_.Name -like "Windows-Logs*.zip" -or $_.Name -like "Zip-AWFolders-*.txt" }
+
+$LatestFiles = @()
+foreach ($pattern in @("RegInfo_*", "Airwatch*.zip", "Windows-Logs*.zip", "Zip-AWFolders-*.txt")) {
+    $latestFile = $GeneratedFiles | Where-Object { $_.Name -like $pattern } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $LatestFiles += $latestFile
+}
+
+$FinalZipFileName = "GeneratedFiles_${Hostname}_${CurrentDateTime}.zip"
+
+Compress-Archive -Path $LatestFiles.FullName -DestinationPath "C:\Temp\$FinalZipFileName"
+
+foreach ($file in $LatestFiles) {
+    Remove-Item $file.FullName -Force
+}
+
+Write-Host ""
+Write-Host "Please submit for investigation zip file located at C:\Temp\$FinalZipFileName" -ForegroundColor Cyan
