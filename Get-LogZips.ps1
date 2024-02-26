@@ -267,14 +267,15 @@ Get-ProfileListKeysInfo | Tee-Object -FilePath "C:\Temp\$Filename" -Append
 Zip-AirwatchFolders
 Export-WindowsLogs
 
-$GeneratedFiles = Get-ChildItem -Path "C:\Temp" -File | Where-Object { $_.Name -like "RegInfo_*.txt" -or $_.Name -like "Airwatch*.zip" -or $_.Name -like "Airwatchx86*.zip" -or $_.Name -like "Windows-Logs*.zip" -or $_.Name -like "Zip-AWFolders-*.txt" }
-
+$GeneratedFiles = Get-ChildItem -Path "C:\Temp" -File | Where-Object { $_.Name -like "RegInfo_*.txt" -or $_.Name -like "Airwatch_*.zip" -or $_.Name -like "Airwatchx86*.zip" -or $_.Name -like "Windows-Logs*.zip" -or $_.Name -like "Zip-AWFolders-*.txt" }
 $LatestFiles = @()
-foreach ($pattern in @("RegInfo_*", "Airwatch*.zip", "Airwatchx86*.zip", "Windows-Logs*.zip", "Zip-AWFolders-*.txt")) {
+
+foreach ($pattern in @("RegInfo_*", "Airwatch_*.zip", "Airwatchx86*.zip", "Windows-Logs*.zip", "Zip-AWFolders-*.txt")) {
     $latestFile = $GeneratedFiles | Where-Object { $_.Name -like $pattern } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     $LatestFiles += $latestFile
 }
 
+$CurrentDateTime = Get-Date -Format "yyyyMMddHHmmss"
 $FinalZipFileName = "GeneratedFiles_${Hostname}_${CurrentDateTime}.zip"
 
 Compress-Archive -Path $LatestFiles.FullName -DestinationPath "C:\Temp\$FinalZipFileName"
