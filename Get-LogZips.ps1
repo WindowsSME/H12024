@@ -31,18 +31,33 @@ function Get-LogonUIRegistryProperties {
 function Get-OMADMSubkeyNames {
     [CmdletBinding()]
     param ()
-    $registryPath = "HKLM:\SOFTWARE\Microsoft\Provisioning\OMADM\Accounts"
-    $subkeys = Get-ChildItem -Path $registryPath
-    if ($subkeys.Count -eq 0) {
-        Write-Output "---------------- OMADM Keys ----------------"
+
+    $omadmRegistryPath = "HKLM:\SOFTWARE\Microsoft\Provisioning\OMADM\Accounts"
+    $omadmSubkeys = Get-ChildItem -Path $omadmRegistryPath
+
+    $mdmDeviceIDRegistryPath = "HKLM:\SOFTWARE\Microsoft\Provisioning\OMADM\MDMDeviceID"
+
+    if (-not (Test-Path $mdmDeviceIDRegistryPath)) {
+        Write-Output "---------------- OMADM Device Client ID ----------------"
         Write-Output ""
-        Write-Output "No OMADM subkeys found under $registryPath"
+        Write-Output "No DeviceClientID subkey found under $mdmDeviceIDRegistryPath"
+        Write-Output ""
+        return
+    }
+
+    $deviceClientId = (Get-ItemProperty -Path $mdmDeviceIDRegistryPath -Name DeviceClientId).DeviceClientId
+
+    if ($omadmSubkeys.Count -eq 0) {
+        Write-Output "---------------- OMADM Accounts ----------------"
+        Write-Output ""
+        Write-Output "No OMADM subkeys found under $omadmRegistryPath"
         Write-Output ""
         return
     }
 
     $subkeyValues = @()
-    foreach ($subkey in $subkeys) {
+
+    foreach ($subkey in $omadmSubkeys) {
         $subkeyName = Split-Path $subkey -Leaf
         try {
             $subkeyValue = (Get-ItemProperty -Path $subkey.PSPath).PSChildName
@@ -55,11 +70,55 @@ function Get-OMADMSubkeyNames {
 
     Write-Output "---------------- OMADM Keys ----------------"
     Write-Output ""
-    foreach ($index in 0..($subkeys.Count - 1)) {
-        $source = $subkeys[$index].PSPath -replace "\\[^\\]+$"
+    foreach ($index in 0..($omadmSubkeys.Count - 1)) {
+        $source = $omadmSubkeys[$index].PSPath -replace "\\[^\\]+$"
         Write-Output "Source                  : $source"
         Write-Output "Enrollment GUID         : $($subkeyValues[$index])"
         Write-Output ""
+    }
+
+    Write-Output "---------------- MDM Device ID ----------------"
+    Write-Output ""
+    Write-Output "DeviceClientId          : $deviceClientId"
+    Write-Output ""
+}
+
+
+function Get-EnrollmentsWithUPN {
+    [CmdletBinding()]
+    param (
+        [string]$RegistryPath = "HKLM:\SOFTWARE\Microsoft\Enrollments"
+    )
+
+    try {
+        $subkeys = Get-ChildItem -Path $RegistryPath -ErrorAction Stop
+
+        $found = $false
+
+        foreach ($subkey in $subkeys) {
+            $value = Get-ItemProperty -Path $subkey.PSPath | Where-Object { $_.UPN -ne $null }
+            if ($value) {
+                $found = $true
+
+                $keyValues = Get-ItemProperty -Path $subkey.PSPath | Select-Object @{Name="Source";Expression={$RegistryPath}}, *
+                $subkeyName = Split-Path $subkey -Leaf
+                $subkeyValue = (Get-ItemProperty -Path $subkey.PSPath).PSChildName
+                Write-Output "------------ Enrollment Values ------------"
+                Write-Output ""
+                Write-Output "Enrollment GUID         : $subkeyName"
+                $keyValues 
+                break
+            }
+        }
+
+        if (-not $found) {
+            Write-Output "------------ Enrollment Values ------------"
+            Write-Output ""
+            Write-Output "No enrollments found under $RegistryPath"
+            Write-Output ""
+        }
+    } catch {
+        Write-Error "Error occurred: $_"
     }
 }
 
