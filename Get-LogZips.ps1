@@ -266,7 +266,7 @@ function Zip-AirwatchFolders {
 
 
 function Export-WindowsLogs {
-    $logArray = @("Application", "Security", "System")
+    $logArray = @("Application", "System")
     $DestinationPath = "C:\Temp\"
 
     $PCName = $env:COMPUTERNAME
