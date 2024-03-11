@@ -305,7 +305,7 @@ function Export-SystemInfoToFile {
     $SystemInfo = systeminfo
     $DateTime = Get-Date -Format "yyyyMMdd-HHmmss"
     $HostName = $env:COMPUTERNAME
-    $FilePath = "C:\Temp\SystemInfo_$HostName_$DateTime.txt"
+    $FilePath = "C:\Temp\SystemInfo_${HostName}_$DateTime.txt"
 
     try {
         $SystemInfo | Out-File -FilePath $FilePath -Append
