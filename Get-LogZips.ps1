@@ -3,7 +3,7 @@
 # Data collected here will be used for troubleshooting WorkspaceONE UEM issues
 
 # AUTHOR:
-# James Romeo Gaspar (jg3098662)
+# James Romeo Gaspar
 # 20 February 2024
 
 # DESCRIPTION:
